@@ -53,3 +53,35 @@ def test_teacher_creates_questions_and_scores_answers():
     assert len(tasks) == 2
     score = teacher.score_answer(tasks[0].question, "Transformer models use attention to process tokens.")
     assert 0 <= score["score"] <= 1
+
+from ai_genesis.benchmark.suite import BenchmarkSuite
+from ai_genesis.config import InternetConfig, TrainingConfig, load_config
+from ai_genesis.data.registry import DatasetQualityAnalyzer
+from ai_genesis.internet.learning import InternetLearningEngine
+
+
+def test_yaml_configs_load_architecture_defaults():
+    config = load_config()
+    assert config.model.model_name == "Genesis-v1"
+    assert isinstance(config.training, TrainingConfig)
+    assert config.training.min_new_tokens_for_training > 0
+    assert config.internet.allowed_domains
+
+
+def test_quality_analyzer_blocks_duplicate_garbage_data():
+    analyzer = DatasetQualityAnalyzer()
+    report = analyzer.analyze(["xxxx" * 20, "xxxx" * 20], expected_language="en")
+    assert report["quality_score"] < 0.65
+    assert report["passed"] is False
+
+
+def test_internet_learning_uses_domain_whitelist():
+    engine = InternetLearningEngine(InternetConfig(allowed_domains=["example.edu"]))
+    assert engine.is_whitelisted("https://docs.example.edu/course")
+    assert not engine.is_whitelisted("https://malicious.test/course")
+
+
+def test_benchmark_suite_scores_answers():
+    suite = BenchmarkSuite()
+    metrics = suite.run(lambda prompt: "42 animal def Washington Mars")
+    assert metrics["accuracy"] == 1.0

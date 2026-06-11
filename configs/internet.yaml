@@ -1,0 +1,13 @@
+user_agent: AI-Genesis-LearningBot/0.1 (+local educational project)
+request_timeout: 15
+min_delay_seconds: 2.0
+max_pages_per_run: 20
+allowed_domains:
+  - wikipedia.org
+  - wikibooks.org
+  - python.org
+  - pytorch.org
+  - khanacademy.org
+  - mit.edu
+  - stanford.edu
+  - arxiv.org

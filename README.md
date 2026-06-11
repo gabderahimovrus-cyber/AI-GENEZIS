@@ -1,48 +1,80 @@
 # AI Genesis
 
-AI Genesis is a local-first MVP for an autonomous learning AI system. It is designed to run without cloud APIs and includes a custom tokenizer, a compact decoder-only Transformer, local memory, data collection, training, evaluation, a knowledge vector store, and a graphical chat interface.
+AI Genesis is a local-first autonomous AI system scaffold. It is designed to run without cloud APIs and now includes scalable infrastructure for configuration, model lifecycle management, independent queues, local memories, data quality control, metrics storage, benchmarking, and a multi-tab GUI.
 
-## MVP Components
+## Architecture
 
 ```text
 AI Genesis
-├── GUI
-├── Chat Engine
-├── Neural Network
-├── Tokenizer
-├── Memory
-├── Internet Learning
-├── Teacher System
-├── Dataset Builder
-├── Training System
-├── Evaluation System
-├── Knowledge Base
-├── Vector Store
-└── Logging
+├── configs/                  # YAML configuration for model, training, memory, internet, GUI
+├── ai_genesis/model          # Transformer, tokenizer, Model Manager, export .pth/.onnx
+├── ai_genesis/training       # Training loop, quality gate, metrics persistence
+├── ai_genesis/data           # Dataset Builder, Dataset Registry, Corpus Manager, quality analyzer
+├── ai_genesis/internet       # Safe Internet Learning Engine with whitelist, robots.txt, rate limit
+├── ai_genesis/memory         # Episodic, Semantic, Learning memory in SQLite
+├── ai_genesis/knowledge      # Vector store and SQLite Knowledge Graph triples
+├── ai_genesis/benchmark      # Math, logic, programming, history, general knowledge tests
+├── ai_genesis/queue          # Independent queues for data, training, eval, chat, system jobs
+├── ai_genesis/system         # CPU/RAM/GPU/VRAM monitoring for GUI
+├── ai_genesis/teacher        # Teacher, curriculum learning, self-play dataset curation
+└── ai_genesis/gui            # Tabs: Chat, Training, Model, Memory, Datasets, Metrics, Logs, Settings
 ```
 
-## Implemented Capabilities
+## Configuration
 
-- **GUI:** Tkinter window with a system status panel, chat history, log panel, and controls for training, pause, stop, save/load model, and log clearing.
-- **Chat Engine:** Local chat pipeline that stores user and Genesis messages in SQLite and can use vector-store context for RAG-style prompts.
-- **Neural Network:** PyTorch decoder-only Transformer named `Genesis-v1` with the MVP configuration: `vocab_size=32000`, `hidden_size=256`, `layers=6`, `heads=8`, and `context_length=512`.
-- **Tokenizer:** SentencePiece BPE wrapper with training, saving, loading, encoding, and decoding.
-- **Internet Learning:** Polite educational content downloader that checks `robots.txt`, uses a project user agent, rate-limits requests, and avoids aggressive crawling.
-- **Teacher System:** Rule-based assistant that proposes topics, generates question tasks, and scores candidate answers for dataset curation.
-- **Dataset Builder:** Cleans text, removes duplicates, normalizes whitespace, and writes JSONL token datasets.
-- **Training System:** Supports scratch training, resume from checkpoint, checkpoint autosave every N steps, and local metrics output.
-- **Evaluation System:** Computes validation loss, perplexity, and generation speed.
-- **Memory:** SQLite-backed episodic, semantic, and learning memory.
-- **Vector Store:** FAISS-backed semantic lookup when FAISS is installed, with a deterministic local NumPy fallback.
-- **Versioning Layout:** `models/base`, `models/candidate`, `models/production`, and `models/archive` directories are created for promotion/rollback workflows.
+All major parameters are loaded from separate YAML files instead of being hardcoded:
 
-## Quick Start
+- `configs/model.yaml`
+- `configs/training.yaml`
+- `configs/memory.yaml`
+- `configs/internet.yaml`
+- `configs/gui.yaml`
+
+The Python config layer keeps safe defaults so tests and local development still work if a config file is missing.
+
+## Model Versioning
+
+Model artifacts are organized as:
+
+```text
+models/base
+models/candidate
+models/production
+models/archive
+```
+
+`ModelManager` can load production/candidate checkpoints, save new candidate versions, promote a candidate to production, roll back to an archived production version, export `.pth`/`.onnx`, and maintain `models/history.jsonl` plus per-version metadata.
+
+## Data, Metrics, and Quality
+
+- `DatasetRegistry` stores dataset name, creation date, document count, token count, size, source count, language, and quality score.
+- `CorpusManager` stores raw source texts, source URL/name, received date, language, token count, corpus versions, and history.
+- `DatasetQualityAnalyzer` checks duplicates, language, document length, noise, garbage text, and blocks training below the configured threshold.
+- `metrics.db` stores epoch, step, loss, validation loss, perplexity, learning rate, processed tokens, and elapsed training time.
+
+## GUI
+
+Launch the GUI with one of:
+
+```bash
+./start_ai_genesis.sh
+python run_genesis.py --gui
+python -m ai_genesis.main --gui
+```
+
+The GUI exposes tabs for Chat, Training, Model, Memory, Datasets, Metrics, Logs, and Settings. It displays model name, version, parameters, size, CPU/RAM/GPU/VRAM status, training status, epoch, loss, perplexity, datasets, recent documents, and a local loss chart.
+
+## CLI
 
 ```bash
 python -m ai_genesis.main --init-db
 python -m ai_genesis.main --gui
+python -m ai_genesis.main --collect-data https://en.wikipedia.org/wiki/Transformer_(machine_learning)
+python -m ai_genesis.main --train data/datasets/train.jsonl
+python -m ai_genesis.main --evaluate
+python -m ai_genesis.main --export-model exports/genesis.pth exports/genesis.onnx
 ```
 
 ## Safety Constraints
 
-The project is structured so learning modules collect text and train local model artifacts, but they do not modify system files, execute arbitrary operating-system commands, download and run programs, or rewrite their own source code without user confirmation.
+AI Genesis is local-only by design. It does not use cloud APIs, does not modify system files, does not execute arbitrary operating-system commands from learning modules, does not download or run third-party programs, respects `robots.txt`, rate-limits requests, and only accepts URLs from the configured educational/technical whitelist.
