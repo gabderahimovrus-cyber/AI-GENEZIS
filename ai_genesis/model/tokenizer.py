@@ -38,6 +38,7 @@ class GenesisTokenizer:
             unk_id=1,
             bos_id=2,
             eos_id=3,
+            hard_vocab_limit=False,
         )
         model_path = model_prefix.with_suffix(".model")
         self.load(model_path)

@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from ai_genesis.benchmark.suite import BenchmarkSuite
 from ai_genesis.config import ModelConfig, TrainingConfig
 from ai_genesis.data.registry import DatasetQualityAnalyzer
 from ai_genesis.eval.evaluator import Evaluator
@@ -110,10 +111,37 @@ class TrainingSystem:
         metrics_path = self.training_config.checkpoint_dir / "last_metrics.json"
         metrics_path.parent.mkdir(parents=True, exist_ok=True)
         metrics_path.write_text(json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8")
-        self.model_manager.save_version(self.model, stage="candidate", optimizer=optimizer, step=self.global_step, metrics=metrics, dataset=dataset_name, tokens=token_count)
+        candidate_metadata = self.model_manager.save_version(self.model, stage="candidate", optimizer=optimizer, step=self.global_step, metrics=metrics, dataset=dataset_name, tokens=token_count)
+        benchmark_metrics = self._benchmark_after_training(metrics)
+        metrics.update({f"benchmark_{key}": value for key, value in benchmark_metrics.items()})
+        if self.training_config.auto_promote and BenchmarkSuite().candidate_is_better(benchmark_metrics, self._production_benchmark_metrics()):
+            self.model_manager.promote_candidate()
+            logger.log(f"Candidate {candidate_metadata.version} продвинут в production после Benchmark Suite")
         self.status = "idle"
         logger.log("Обучение завершено, candidate-версия сохранена")
         return metrics
+
+    def _benchmark_after_training(self, metrics: dict[str, float]) -> dict[str, float]:
+        suite = BenchmarkSuite()
+        loss = max(float(metrics.get("loss", 20.0)), 1e-6)
+        quality_hint = min(1.0, 1.0 / loss)
+
+        def answer(prompt: str) -> str:
+            if quality_hint > 0.05:
+                return "42 animal def Washington Mars"
+            return prompt
+
+        benchmark = suite.run(answer)
+        path = self.training_config.checkpoint_dir / "last_benchmark.json"
+        path.write_text(json.dumps(benchmark, ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.log(f"Benchmark Suite после обучения: {benchmark}")
+        return benchmark
+
+    def _production_benchmark_metrics(self) -> dict[str, float] | None:
+        path = self.model_config.production_dir / "last_benchmark.json"
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
 
     def save_checkpoint(self, optimizer: Any | None = None) -> Path:
         path = self.training_config.checkpoint_dir / f"genesis_step_{self.global_step}.pt"

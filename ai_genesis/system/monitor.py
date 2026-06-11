@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
+import subprocess
 from dataclasses import dataclass, asdict
 from typing import Any
 
@@ -74,6 +76,42 @@ class SystemMonitor:
             return {"name": "cpu-only"}
         device = torch.cuda.current_device()
         props = torch.cuda.get_device_properties(device)
-        used = torch.cuda.memory_allocated(device) / (1024**2)
+        allocated = torch.cuda.memory_allocated(device) / (1024**2)
+        reserved = torch.cuda.memory_reserved(device) / (1024**2)
         total = props.total_memory / (1024**2)
-        return {"name": props.name, "vram_used_mb": round(used, 1), "vram_total_mb": round(total, 1), "gpu_percent": None, "temperature": None}
+        telemetry = self._nvidia_smi()
+        used = telemetry.get("vram_used_mb", max(allocated, reserved))
+        return {
+            "name": telemetry.get("name") or props.name,
+            "vram_used_mb": round(float(used), 1),
+            "vram_total_mb": round(float(telemetry.get("vram_total_mb", total)), 1),
+            "gpu_percent": telemetry.get("gpu_percent"),
+            "temperature": telemetry.get("temperature"),
+        }
+
+    def _nvidia_smi(self) -> dict[str, Any]:
+        if shutil.which("nvidia-smi") is None:
+            return {}
+        try:
+            result = subprocess.run(
+                [
+                    "nvidia-smi",
+                    "--query-gpu=name,memory.used,memory.total,temperature.gpu,utilization.gpu",
+                    "--format=csv,noheader,nounits",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=2,
+            )
+            first = result.stdout.strip().splitlines()[0]
+            name, used, total, temp, util = [part.strip() for part in first.split(",")[:5]]
+            return {
+                "name": name,
+                "vram_used_mb": float(used),
+                "vram_total_mb": float(total),
+                "temperature": float(temp),
+                "gpu_percent": float(util),
+            }
+        except Exception:
+            return {}
