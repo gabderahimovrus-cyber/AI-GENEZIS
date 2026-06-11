@@ -85,3 +85,39 @@ def test_benchmark_suite_scores_answers():
     suite = BenchmarkSuite()
     metrics = suite.run(lambda prompt: "42 animal def Washington Mars")
     assert metrics["accuracy"] == 1.0
+
+
+def test_online_fallback_answers_without_local_tokenizer_or_checkpoint(tmp_path: Path):
+    from ai_genesis.chat.engine import ChatEngine
+    from ai_genesis.config import ModelConfig
+    from ai_genesis.memory.sqlite_memory import MemoryStore
+    from ai_genesis.model.online import OnlineModelConfig
+
+    class FakeOnlineClient:
+        config = OnlineModelConfig(enabled=True, provider="fake", model="fake")
+
+        def generate(self, prompt: str, max_new_tokens: int = 256) -> str:
+            assert "Пользователь: привет" in prompt
+            return "онлайн ответ"
+
+    config = ModelConfig(online_enabled=True)
+    engine = ChatEngine(memory=MemoryStore(tmp_path / "memory.sqlite3"), online_client=FakeOnlineClient(), model_config=config)
+    assert engine.answer("привет") == "онлайн ответ"
+
+
+def test_online_mode_downgrades_local_artifacts_to_warnings(tmp_path: Path):
+    from ai_genesis.config import MemoryConfig, ModelConfig
+    from ai_genesis.diagnostics import SystemDiagnostics
+
+    model_config = ModelConfig(
+        online_enabled=True,
+        tokenizer_path=tmp_path / "models" / "base" / "tokenizer.model",
+        production_dir=tmp_path / "models" / "production",
+        candidate_dir=tmp_path / "models" / "candidate",
+        archive_dir=tmp_path / "models" / "archive",
+    )
+    diagnostics = SystemDiagnostics(model_config, MemoryConfig())
+    statuses = {item.name: item.status for item in diagnostics.run()}
+    assert statuses["Tokenizer"] == "WARNING"
+    assert statuses["Production Model"] == "WARNING"
+    assert statuses["Online Model"] in {"OK", "WARNING"}

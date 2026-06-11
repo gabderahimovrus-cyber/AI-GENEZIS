@@ -103,6 +103,12 @@ class ModelConfig:
     production_dir: Path = MODELS_DIR / "production"
     candidate_dir: Path = MODELS_DIR / "candidate"
     archive_dir: Path = MODELS_DIR / "archive"
+    online_enabled: bool = True
+    online_provider: str = "openai_compatible"
+    online_model: str = "gpt-4o-mini"
+    online_base_url: str = "https://api.openai.com/v1"
+    online_api_key_env: str = "OPENAI_API_KEY"
+    online_timeout_seconds: int = 60
 
     @classmethod
     def load(cls) -> "ModelConfig":

@@ -17,6 +17,7 @@ from ai_genesis.logging_system import logger
 from ai_genesis.memory.sqlite_memory import MemoryStore
 from ai_genesis.metrics.store import MetricsStore
 from ai_genesis.model.manager import ModelManager
+from ai_genesis.model.online import OnlineModelClient, OnlineModelConfig
 from ai_genesis.model.tokenizer import GenesisTokenizer
 from ai_genesis.queue.task_queue import TaskQueueSystem
 from ai_genesis.system.monitor import SystemMonitor
@@ -34,7 +35,7 @@ class GenesisGUI(tk.Tk):
         self.title(self.gui_config.title)
         self.geometry(f"{self.gui_config.width}x{self.gui_config.height}")
         self.minsize(1100, 720)
-        self.chat_engine = ChatEngine()
+        self.chat_engine = ChatEngine(model_config=self.model_config)
         self.monitor = SystemMonitor()
         self.task_queue = TaskQueueSystem()
         self.model_manager = ModelManager(self.model_config)
@@ -148,12 +149,12 @@ class GenesisGUI(tk.Tk):
         form = ttk.Frame(tab)
         form.grid(row=0, column=0, sticky="ew")
         self.teacher_topic = tk.StringVar(value="Transformer architecture")
-        self.assistant_backend = tk.StringVar(value="transformers")
-        self.assistant_model = tk.StringVar(value="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+        self.assistant_backend = tk.StringVar(value="openai_compatible" if self.model_config.online_enabled else "transformers")
+        self.assistant_model = tk.StringVar(value=self.model_config.online_model if self.model_config.online_enabled else "TinyLlama/TinyLlama-1.1B-Chat-v1.0")
         ttk.Label(form, text="Тема:").pack(side="left")
         ttk.Entry(form, textvariable=self.teacher_topic, width=32).pack(side="left", padx=6)
         ttk.Label(form, text="Assistant backend:").pack(side="left")
-        ttk.Combobox(form, textvariable=self.assistant_backend, values=["transformers", "gguf", "ollama"], width=14).pack(side="left", padx=6)
+        ttk.Combobox(form, textvariable=self.assistant_backend, values=["openai_compatible", "huggingface", "transformers", "gguf", "ollama"], width=18).pack(side="left", padx=6)
         ttk.Entry(form, textvariable=self.assistant_model, width=38).pack(side="left", padx=6)
         ttk.Button(form, text="Сгенерировать задания", command=self._teacher_generate).pack(side="left", padx=4)
         ttk.Button(form, text="Проверить помощника", command=self._assistant_check).pack(side="left", padx=4)
@@ -175,6 +176,7 @@ class GenesisGUI(tk.Tk):
         controls = ttk.Frame(tab)
         controls.grid(row=1, column=0, sticky="ew", pady=8)
         ttk.Button(controls, text="Загрузить checkpoint", command=self._load_model).pack(side="left", padx=4)
+        ttk.Button(controls, text="Проверить интернет-модель", command=self._check_online_model).pack(side="left", padx=4)
         ttk.Button(controls, text="Продвинуть candidate", command=self._promote_candidate).pack(side="left", padx=4)
         ttk.Button(controls, text="Откат production", command=self._rollback_model).pack(side="left", padx=4)
         ttk.Button(controls, text="Обновить", command=self._refresh_models).pack(side="left", padx=4)
@@ -243,7 +245,7 @@ class GenesisGUI(tk.Tk):
         description.insert("end", "Отсутствуют обязательные компоненты:\n\n")
         for item in missing:
             description.insert("end", f"• {item.name}: {item.message}\n")
-        description.insert("end", "\nНажмите кнопку ниже, чтобы создать каталоги, базы данных, tokenizer, dataset, candidate/production модели и checkpoint.")
+        description.insert("end", "\nЕсли нужна полностью локальная работа — нажмите кнопку ниже для создания tokenizer, dataset и candidate/production checkpoint. Если включена интернет-модель, чат может работать без локальной модели после настройки API-ключа.")
         description.configure(state="disabled")
         progress = tk.StringVar(value="Готово к запуску")
         ttk.Label(dialog, textvariable=progress).pack(fill="x", padx=16)
@@ -318,6 +320,22 @@ class GenesisGUI(tk.Tk):
         status = "доступен" if assistant.available() else "не установлен backend/dependency"
         self.teacher_text.insert("end", f"\nKnowledge Assistant ({config.backend}:{config.model}) {status}.\n")
 
+    def _check_online_model(self) -> None:
+        config = OnlineModelConfig(
+            enabled=self.model_config.online_enabled,
+            provider=self.model_config.online_provider,
+            model=self.model_config.online_model,
+            base_url=self.model_config.online_base_url,
+            api_key_env=self.model_config.online_api_key_env,
+            timeout_seconds=self.model_config.online_timeout_seconds,
+        )
+        client = OnlineModelClient(config)
+        status = client.status_message()
+        if client.available():
+            messagebox.showinfo("Интернет-модель", status)
+        else:
+            messagebox.showwarning("Интернет-модель", status)
+
     def _load_model(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("PyTorch checkpoint", "*.pt")])
         if path:
@@ -358,8 +376,12 @@ class GenesisGUI(tk.Tk):
     def _refresh_header(self) -> None:
         status = self.model_manager.current_status()
         snapshot = self.monitor.snapshot()
-        self.model_name_var.set(str(status.get("model_name", self.model_config.model_name)))
-        self.version_var.set(f"Версия: {status.get('version', 'MVP не инициализирован')}")
+        display_name = str(status.get("model_name", self.model_config.model_name))
+        if self.model_config.online_enabled and not status.get("version"):
+            display_name = f"Genesis ⇄ {self.model_config.online_model}"
+        self.model_name_var.set(display_name)
+        version = status.get("version") or ("online backend" if self.model_config.online_enabled else "MVP не инициализирован")
+        self.version_var.set(f"Версия: {version}")
         params = int(status.get("parameters") or 0)
         self.params_var.set(f"Параметры: {params:,}" if params else "Параметры: ожидают инициализации")
         size = int(status.get("size_bytes") or 0)
