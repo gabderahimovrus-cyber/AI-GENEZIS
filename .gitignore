@@ -1,0 +1,16 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+*.sqlite3
+logs/*.log
+models/**/*.pt
+models/**/*.bin
+models/**/*.safetensors
+data/raw/*
+data/clean/*
+data/datasets/*
+!data/raw/.gitkeep
+!data/clean/.gitkeep
+!data/datasets/.gitkeep
