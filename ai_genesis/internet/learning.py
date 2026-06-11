@@ -29,10 +29,14 @@ class InternetLearningEngine:
     def collect(self, urls: Iterable[str]) -> list[LearnedDocument]:
         documents: list[LearnedDocument] = []
         for url in list(urls)[: self.config.max_pages_per_run]:
-            if not self.allowed_by_robots(url):
+            if not self.is_whitelisted(url) or not self.allowed_by_robots(url):
                 continue
             documents.append(self.fetch_article(url))
         return documents
+
+    def is_whitelisted(self, url: str) -> bool:
+        host = urlparse(url).netloc.lower()
+        return any(host == domain or host.endswith(f".{domain}") for domain in self.config.allowed_domains)
 
     def allowed_by_robots(self, url: str) -> bool:
         parsed = urlparse(url)

@@ -1,0 +1,9 @@
+batch_size: 8
+learning_rate: 0.0003
+epochs: 1
+checkpoint_every_steps: 500
+device: auto
+checkpoint_dir: models/candidate
+min_new_tokens_for_training: 50000
+quality_threshold: 0.65
+auto_promote: true

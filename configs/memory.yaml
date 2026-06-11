@@ -1,0 +1,6 @@
+memory_db_path: genesis_memory.sqlite3
+metrics_db_path: metrics.db
+knowledge_graph_db_path: knowledge_graph.db
+episodic_limit: 200
+semantic_limit: 1000
+learning_limit: 1000

@@ -1,0 +1,11 @@
+model_name: Genesis-v1
+vocab_size: 32000
+hidden_size: 256
+num_layers: 6
+num_heads: 8
+context_length: 512
+dropout: 0.1
+tokenizer_path: models/base/tokenizer.model
+production_dir: models/production
+candidate_dir: models/candidate
+archive_dir: models/archive
