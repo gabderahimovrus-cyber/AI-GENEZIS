@@ -67,3 +67,67 @@ class TeacherSystem:
             for record in accepted:
                 file.write(json.dumps(record, ensure_ascii=False) + "\n")
         return accepted
+
+@dataclass(slots=True)
+class AssistantModelConfig:
+    """Configuration for an optional local helper model used as Teacher/Knowledge Assistant."""
+
+    backend: str
+    model: str
+    role: str = "teacher"
+
+
+class LocalAssistantModel:
+    """Adapter for optional local helper models via Transformers, GGUF llama-cpp, or Ollama.
+
+    The adapter is intentionally separate from Genesis model training: helper output can be
+    used to create or evaluate data, but this class never edits project code or weights.
+    """
+
+    def __init__(self, config: AssistantModelConfig) -> None:
+        self.config = config
+        self._pipeline = None
+        self._llm = None
+
+    def available(self) -> bool:
+        import importlib.util
+
+        if self.config.backend == "transformers":
+            return importlib.util.find_spec("transformers") is not None
+        if self.config.backend == "gguf":
+            return importlib.util.find_spec("llama_cpp") is not None
+        if self.config.backend == "ollama":
+            return importlib.util.find_spec("requests") is not None
+        return False
+
+    def generate(self, prompt: str, max_new_tokens: int = 256) -> str:
+        if self.config.backend == "transformers":
+            return self._generate_transformers(prompt, max_new_tokens)
+        if self.config.backend == "gguf":
+            return self._generate_gguf(prompt, max_new_tokens)
+        if self.config.backend == "ollama":
+            return self._generate_ollama(prompt)
+        raise ValueError(f"Unsupported assistant backend: {self.config.backend}")
+
+    def _generate_transformers(self, prompt: str, max_new_tokens: int) -> str:
+        if self._pipeline is None:
+            from transformers import pipeline
+
+            self._pipeline = pipeline("text-generation", model=self.config.model, device_map="auto")
+        result = self._pipeline(prompt, max_new_tokens=max_new_tokens, do_sample=True, temperature=0.7)
+        return str(result[0].get("generated_text", ""))
+
+    def _generate_gguf(self, prompt: str, max_new_tokens: int) -> str:
+        if self._llm is None:
+            from llama_cpp import Llama
+
+            self._llm = Llama(model_path=self.config.model)
+        result = self._llm(prompt, max_tokens=max_new_tokens)
+        return str(result["choices"][0]["text"])
+
+    def _generate_ollama(self, prompt: str) -> str:
+        import requests
+
+        response = requests.post("http://localhost:11434/api/generate", json={"model": self.config.model, "prompt": prompt, "stream": False}, timeout=120)
+        response.raise_for_status()
+        return str(response.json().get("response", ""))

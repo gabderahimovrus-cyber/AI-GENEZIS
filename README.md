@@ -52,6 +52,35 @@ models/archive
 - `DatasetQualityAnalyzer` checks duplicates, language, document length, noise, garbage text, and blocks training below the configured threshold.
 - `metrics.db` stores epoch, step, loss, validation loss, perplexity, learning rate, processed tokens, and elapsed training time.
 
+
+## First-run MVP initialization
+
+On the first GUI launch AI Genesis now checks the complete local runtime: `tokenizer.model`, `tokenizer.vocab`, candidate and production checkpoints, datasets, SQLite databases, and required project directories. If anything required is missing, the GUI opens a first-run wizard with one action: **«Инициализировать Genesis»**.
+
+The same workflow is available from CLI:
+
+```bash
+python -m ai_genesis.main --init-genesis
+```
+
+Initialization creates the directory layout, initializes SQLite stores, writes a demo educational corpus, trains the SentencePiece tokenizer, creates the first JSONL dataset, runs a short smoke-training cycle, saves checkpoints, registers candidate and production versions through `ModelManager`, records metrics, and stores a machine-readable `genesis_initialized.json` summary.
+
+## Diagnostics and hardware monitoring
+
+The GUI includes a **«Диагностика системы»** tab with OK/WARNING/ERROR checks for Tokenizer, Dataset, Production Model, Candidate Model, CUDA, PyTorch, SentencePiece, FAISS, SQLite, Vector Store, Memory System, Teacher System, and Internet Learning Engine.
+
+Hardware monitoring reports CPU load, RAM usage, CUDA device name, VRAM total/used, GPU utilization, and GPU temperature when PyTorch CUDA and/or `nvidia-smi` are available. If CUDA is missing, diagnostics shows a clear PyTorch CUDA installation hint.
+
+## Teacher and local assistant models
+
+The Teacher module remains separate from Genesis weights and source code. It can generate curriculum tasks, score answers, curate question-answer records, and identify topics for further learning. The GUI Teacher tab also supports optional helper models as Teacher or Knowledge Assistant through:
+
+- Hugging Face Transformers (`transformers` backend)
+- GGUF via `llama-cpp-python` (`gguf` backend)
+- Ollama local server (`ollama` backend)
+
+These assistants can help create training data and evaluations while Genesis remains the project-owned model trained through the local pipeline.
+
 ## GUI
 
 Launch the GUI with one of:
@@ -62,7 +91,7 @@ python run_genesis.py --gui
 python -m ai_genesis.main --gui
 ```
 
-The GUI exposes tabs for Chat, Training, Model, Memory, Datasets, Metrics, Logs, and Settings. It displays model name, version, parameters, size, CPU/RAM/GPU/VRAM status, training status, epoch, loss, perplexity, datasets, recent documents, and a local loss chart.
+The GUI exposes tabs for Chat, Training, Teacher, Models, System Diagnostics, Memory, Datasets, Metrics, Logs, and Settings. It displays model name, version, parameters, size, CPU/RAM/GPU/VRAM status, training status, epoch, loss, perplexity, datasets, recent documents, and a local loss chart.
 
 ## CLI
 

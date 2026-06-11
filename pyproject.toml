@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 vector = ["faiss-cpu>=1.7.4"]
+assistant = ["transformers>=4.41", "accelerate>=0.30", "llama-cpp-python>=0.2.80"]
 test = ["pytest>=7.0"]
 
 [project.scripts]

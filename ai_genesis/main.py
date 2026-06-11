@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
 from ai_genesis.benchmark.suite import BenchmarkSuite
@@ -10,6 +11,7 @@ from ai_genesis.config import ensure_project_layout, load_config
 from ai_genesis.data.corpus_manager import CorpusDocument, CorpusManager
 from ai_genesis.data.registry import DatasetQualityAnalyzer, DatasetRegistry
 from ai_genesis.gui.app import run_gui
+from ai_genesis.initialization import GenesisInitializer
 from ai_genesis.internet.learning import InternetLearningEngine
 from ai_genesis.knowledge.graph import KnowledgeGraph
 from ai_genesis.logging_system import logger
@@ -22,6 +24,7 @@ from ai_genesis.training.trainer import TrainingSystem
 def main() -> None:
     parser = argparse.ArgumentParser(description="AI Genesis local autonomous system")
     parser.add_argument("--init-db", action="store_true", help="Initialize SQLite memory, metrics, corpus, dataset, and graph databases")
+    parser.add_argument("--init-genesis", action="store_true", help="Run the full first-start MVP initialization wizard backend")
     parser.add_argument("--gui", action="store_true", help="Start graphical interface")
     parser.add_argument("--train", type=Path, help="Run local training on a tokenized dataset JSONL path")
     parser.add_argument("--evaluate", action="store_true", help="Run benchmark scaffold against the current chat/model interface")
@@ -31,6 +34,11 @@ def main() -> None:
 
     ensure_project_layout()
     config = load_config()
+
+    if args.init_genesis:
+        summary = GenesisInitializer().initialize()
+        print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+        return
 
     if args.init_db:
         MemoryStore(config.memory.memory_db_path).initialize()
