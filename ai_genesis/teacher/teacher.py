@@ -7,6 +7,9 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Callable
 
+from ai_genesis.config import ModelConfig
+from ai_genesis.model.online import OnlineModelClient, OnlineModelConfig
+
 
 @dataclass(slots=True)
 class TeachingTask:
@@ -92,6 +95,8 @@ class LocalAssistantModel:
     def available(self) -> bool:
         import importlib.util
 
+        if self.config.backend in {"openai_compatible", "huggingface"}:
+            return self._online_client().available()
         if self.config.backend == "transformers":
             return importlib.util.find_spec("transformers") is not None
         if self.config.backend == "gguf":
@@ -101,6 +106,8 @@ class LocalAssistantModel:
         return False
 
     def generate(self, prompt: str, max_new_tokens: int = 256) -> str:
+        if self.config.backend in {"openai_compatible", "huggingface"}:
+            return self._online_client().generate(prompt, max_new_tokens=max_new_tokens)
         if self.config.backend == "transformers":
             return self._generate_transformers(prompt, max_new_tokens)
         if self.config.backend == "gguf":
@@ -108,6 +115,19 @@ class LocalAssistantModel:
         if self.config.backend == "ollama":
             return self._generate_ollama(prompt)
         raise ValueError(f"Unsupported assistant backend: {self.config.backend}")
+
+    def _online_client(self) -> OnlineModelClient:
+        model_config = ModelConfig.load()
+        return OnlineModelClient(
+            OnlineModelConfig(
+                enabled=True,
+                provider=self.config.backend,
+                model=self.config.model,
+                base_url="https://api-inference.huggingface.co/models" if self.config.backend == "huggingface" else model_config.online_base_url,
+                api_key_env=model_config.online_api_key_env,
+                timeout_seconds=model_config.online_timeout_seconds,
+            )
+        )
 
     def _generate_transformers(self, prompt: str, max_new_tokens: int) -> str:
         if self._pipeline is None:

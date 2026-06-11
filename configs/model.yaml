@@ -9,3 +9,12 @@ tokenizer_path: models/base/tokenizer.model
 production_dir: models/production
 candidate_dir: models/candidate
 archive_dir: models/archive
+# Optional internet-hosted chat model. When enabled, Genesis can answer in Chat
+# without a local tokenizer/checkpoint. Set OPENAI_API_KEY (or change
+# online_api_key_env) before launching the app.
+online_enabled: true
+online_provider: openai_compatible
+online_model: gpt-4o-mini
+online_base_url: https://api.openai.com/v1
+online_api_key_env: OPENAI_API_KEY
+online_timeout_seconds: 60
