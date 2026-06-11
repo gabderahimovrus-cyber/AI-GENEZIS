@@ -11,6 +11,7 @@ from typing import Iterable
 from ai_genesis.config import DATA_DIR, LOG_DIR, METRICS_DB_PATH, MODELS_DIR, ROOT_DIR, MemoryConfig, ModelConfig
 from ai_genesis.knowledge.vector_store import VectorStore
 from ai_genesis.logging_system import logger
+from ai_genesis.model.online import OnlineModelClient, OnlineModelConfig
 from ai_genesis.system.monitor import SystemMonitor
 
 
@@ -34,6 +35,7 @@ class SystemDiagnostics:
             self._dataset(),
             self._model("Production Model", self.model_config.production_dir),
             self._model("Candidate Model", self.model_config.candidate_dir),
+            self._online_model(),
             self._cuda(),
             self._dependency("PyTorch", "torch"),
             self._dependency("SentencePiece", "sentencepiece"),
@@ -47,19 +49,29 @@ class SystemDiagnostics:
         return checks
 
     def missing_required_components(self) -> list[DiagnosticItem]:
-        required = {"Tokenizer", "Dataset", "Production Model", "Candidate Model", "SQLite", "Memory System"}
+        required = {"SQLite", "Memory System"}
+        if not self.model_config.online_enabled:
+            required.update({"Tokenizer", "Dataset", "Production Model", "Candidate Model"})
         missing = [item for item in self.run() if item.name in required and item.status == "ERROR"]
         required_dirs = [DATA_DIR / "raw", DATA_DIR / "clean", DATA_DIR / "datasets", MODELS_DIR / "base", MODELS_DIR / "candidate", MODELS_DIR / "production", LOG_DIR]
         for directory in required_dirs:
             if not directory.exists():
-                missing.append(DiagnosticItem("Directories", "ERROR", f"Отсутствует каталог {directory.relative_to(ROOT_DIR)}"))
+                missing.append(DiagnosticItem("Directories", "ERROR", f"Отсутствует каталог {self._display_path(directory)}"))
         return missing
+
+    def _display_path(self, path: Path) -> str:
+        try:
+            return str(path.relative_to(ROOT_DIR))
+        except ValueError:
+            return str(path)
 
     def _tokenizer(self) -> DiagnosticItem:
         model = self.model_config.tokenizer_path
         vocab = model.with_suffix(".vocab")
         if model.exists() and vocab.exists() and model.stat().st_size > 0 and vocab.stat().st_size > 0:
             return DiagnosticItem("Tokenizer", "OK", f"Найден {model.name} и {vocab.name}")
+        if self.model_config.online_enabled:
+            return DiagnosticItem("Tokenizer", "WARNING", "Локальный tokenizer отсутствует, но включена интернет-модель для чата.")
         return DiagnosticItem("Tokenizer", "ERROR", "Отсутствуют tokenizer.model/tokenizer.vocab. Запустите инициализацию Genesis.")
 
     def _dataset(self) -> DiagnosticItem:
@@ -67,6 +79,8 @@ class SystemDiagnostics:
         datasets = [path for path in datasets if path.stat().st_size > 0]
         if datasets:
             return DiagnosticItem("Dataset", "OK", f"Найден датасет {datasets[-1].relative_to(ROOT_DIR)}")
+        if self.model_config.online_enabled:
+            return DiagnosticItem("Dataset", "WARNING", "Локальный датасет отсутствует; интернет-модель может отвечать без него.")
         return DiagnosticItem("Dataset", "ERROR", "Нет подготовленного JSONL-датасета.")
 
     def _model(self, name: str, directory: Path) -> DiagnosticItem:
@@ -74,7 +88,24 @@ class SystemDiagnostics:
         metadata = sorted(directory.glob("*.metadata.json")) if directory.exists() else []
         if checkpoints and metadata and checkpoints[-1].stat().st_size > 0:
             return DiagnosticItem(name, "OK", f"Найден checkpoint {checkpoints[-1].name}")
-        return DiagnosticItem(name, "ERROR", f"В {directory.relative_to(ROOT_DIR)} нет зарегистрированной модели.")
+        if self.model_config.online_enabled:
+            return DiagnosticItem(name, "WARNING", f"В {self._display_path(directory)} нет локальной модели; чат использует интернет-backend.")
+        return DiagnosticItem(name, "ERROR", f"В {self._display_path(directory)} нет зарегистрированной модели.")
+
+    def _online_model(self) -> DiagnosticItem:
+        config = OnlineModelConfig(
+            enabled=self.model_config.online_enabled,
+            provider=self.model_config.online_provider,
+            model=self.model_config.online_model,
+            base_url=self.model_config.online_base_url,
+            api_key_env=self.model_config.online_api_key_env,
+            timeout_seconds=self.model_config.online_timeout_seconds,
+        )
+        client = OnlineModelClient(config)
+        if client.available():
+            return DiagnosticItem("Online Model", "OK", client.status_message())
+        status = "WARNING" if config.enabled else "OK"
+        return DiagnosticItem("Online Model", status, client.status_message())
 
     def _cuda(self) -> DiagnosticItem:
         if importlib.util.find_spec("torch") is None:
